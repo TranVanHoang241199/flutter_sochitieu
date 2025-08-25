@@ -1,0 +1,12 @@
+targets:
+  $default:
+    builders:
+      riverpod_generator:riverpod_generator:
+        options:
+          provider_name_suffix: "Provider"
+        generate_for:
+          - lib/features/**/*.dart
+          - lib/shared/**/*.dart
+      hive_generator:hive_generator:
+        generate_for:
+          - lib/shared/models/*.dart
