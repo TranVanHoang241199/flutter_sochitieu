@@ -4,6 +4,7 @@ import 'package:flutter_sochitieu/shared/models/category.dart';
 import 'package:flutter_sochitieu/shared/models/income_expense.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_sochitieu/shared/providers/app_providers.dart';
 
 class ReportPage extends ConsumerStatefulWidget {
   const ReportPage({super.key});
@@ -232,6 +233,7 @@ class _ReportPageState extends ConsumerState<ReportPage>
 
   @override
   Widget build(BuildContext context) {
+    final overviewAsync = ref.watch(reportOverviewProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Báo cáo thống kê'),
@@ -241,7 +243,7 @@ class _ReportPageState extends ConsumerState<ReportPage>
       ),
       body: Column(
         children: [
-          // Header với thống kê tổng quan
+          // Header với thống kê tổng quan (ưu tiên dữ liệu API nếu có)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -275,9 +277,49 @@ class _ReportPageState extends ConsumerState<ReportPage>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildStatCard('Thu nhập', _totalIncome, Colors.green, Icons.trending_up),
-                    _buildStatCard('Chi tiêu', _totalExpense, Colors.red, Icons.trending_down),
-                    _buildStatCard('Còn lại', _balance, Colors.blue, Icons.account_balance_wallet),
+                    overviewAsync.when(
+                      data: (data) {
+                        if (data['success'] == true) {
+                          final income = (data['data']['income'] as num?)?.toDouble() ?? _totalIncome;
+                          final expense = (data['data']['expense'] as num?)?.toDouble() ?? _totalExpense;
+                          final balance = income - expense;
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _buildStatCard('Thu nhập', income, Colors.green, Icons.trending_up),
+                              _buildStatCard('Chi tiêu', expense, Colors.red, Icons.trending_down),
+                              _buildStatCard('Còn lại', balance, Colors.blue, Icons.account_balance_wallet),
+                            ],
+                          );
+                        }
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildStatCard('Thu nhập', _totalIncome, Colors.green, Icons.trending_up),
+                            _buildStatCard('Chi tiêu', _totalExpense, Colors.red, Icons.trending_down),
+                            _buildStatCard('Còn lại', _balance, Colors.blue, Icons.account_balance_wallet),
+                          ],
+                        );
+                      },
+                      loading: () => Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: const [
+                          CircularProgressIndicator(color: Colors.white),
+                          SizedBox(width: 16),
+                          CircularProgressIndicator(color: Colors.white),
+                          SizedBox(width: 16),
+                          CircularProgressIndicator(color: Colors.white),
+                        ],
+                      ),
+                      error: (_, __) => Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildStatCard('Thu nhập', _totalIncome, Colors.green, Icons.trending_up),
+                          _buildStatCard('Chi tiêu', _totalExpense, Colors.red, Icons.trending_down),
+                          _buildStatCard('Còn lại', _balance, Colors.blue, Icons.account_balance_wallet),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ],

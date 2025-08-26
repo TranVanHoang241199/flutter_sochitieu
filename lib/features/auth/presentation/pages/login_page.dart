@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_sochitieu/core/constants/app_constants.dart';
 import 'package:flutter_sochitieu/shared/models/user.dart';
 import 'package:flutter_sochitieu/shared/providers/app_providers.dart';
-import '../../home/presentation/pages/home_page.dart';
+import '../../../home/presentation/pages/home_page.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -49,19 +49,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         );
 
         await ref.read(currentUserProvider.notifier).setCurrentUser(loggedInUser);
-
-        // Trigger sync after login
-        try {
-          final syncService = ref.read(syncServiceProvider);
-          await syncService.syncOnLogin(loggedInUser);
-          // Start background auto sync
-          // Do not await to avoid blocking UI
-          // ignore: unawaited_futures
-          syncService.startAutoSync();
-          // Refresh providers to reflect latest data
-          await ref.read(categoriesProvider.notifier).refresh();
-          await ref.read(incomeExpensesProvider.notifier).refresh();
-        } catch (_) {}
 
         if (!mounted) return;
         Navigator.of(context).pushAndRemoveUntil(
@@ -110,6 +97,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
+                  textAlign: TextAlign.left,
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -120,6 +108,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       ?.copyWith(color: Theme.of(context).hintColor),
                 ),
                 const SizedBox(height: 24),
+
+                // Username
                 TextFormField(
                   controller: _userNameController,
                   textInputAction: TextInputAction.next,
@@ -133,10 +123,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     if (value == null || value.trim().isEmpty) {
                       return 'Vui lòng nhập tên đăng nhập';
                     }
+                    if (value.trim().length < 3) {
+                      return 'Tên đăng nhập phải có ít nhất 3 ký tự';
+                    }
                     return null;
                   },
                 ),
+
                 const SizedBox(height: 16),
+
+                // Password
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
@@ -159,7 +155,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     return null;
                   },
                 ),
+
                 const SizedBox(height: 24),
+
+                // Submit button
                 SizedBox(
                   height: 52,
                   child: ElevatedButton(
@@ -174,6 +173,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             'Đăng nhập',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                           ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // Forgot password (placeholder)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {},
+                    child: const Text('Quên mật khẩu?'),
                   ),
                 ),
               ],

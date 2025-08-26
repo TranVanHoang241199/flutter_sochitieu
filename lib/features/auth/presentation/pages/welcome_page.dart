@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_sochitieu/shared/models/category.dart';
 import 'package:flutter_sochitieu/shared/models/income_expense.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../../shared/providers/app_providers.dart';
-import '../../../shared/models/user.dart';
-import '../../../core/constants/app_constants.dart';
+import '../../../../shared/providers/app_providers.dart';
+import '../../../../shared/models/user.dart';
+import '../../../../core/constants/app_constants.dart';
 import 'login_page.dart';
 import 'register_page.dart';
-import '../../home/pages/home_page.dart';
+import '../../../home/presentation/pages/home_page.dart';
 
 class WelcomePage extends ConsumerStatefulWidget {
   const WelcomePage({super.key});

@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_sochitieu/features/auth/presentation/pages/welcome_page.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_sochitieu/shared/utils/formatters.dart';
+import 'package:flutter_sochitieu/shared/providers/app_providers.dart';
+import '../widgets/setting_section_header.dart';
+import '../widgets/setting_tile.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -20,6 +26,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final themeMode = ref.watch(themeModeProvider);
+    final currentUser = ref.watch(currentUserProvider);
+    final bool isLoggedIn = currentUser?.isOnline == true; // offline user is not logged in
+    _darkModeEnabled = themeMode == ThemeMode.dark;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Cài đặt'),
@@ -54,16 +64,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Người dùng',
-                    style: TextStyle(
+                  Text(
+                    (currentUser?.fullName?.isNotEmpty ?? false)
+                        ? (currentUser!.fullName!)
+                        : 'Người dùng',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   Text(
-                    'user@example.com',
+                    (currentUser?.email?.isNotEmpty ?? false)
+                        ? (currentUser!.email!)
+                        : (isLoggedIn ? 'user@example.com' : 'Chế độ không đăng nhập'),
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.8),
                       fontSize: 16,
@@ -76,8 +90,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             const SizedBox(height: 20),
             
             // Cài đặt chung
-            _buildSectionHeader('Cài đặt chung'),
-            _buildSettingTile(
+            const SettingSectionHeader(title: 'Cài đặt chung'),
+            SettingTile(
               icon: Icons.notifications,
               title: 'Thông báo',
               subtitle: 'Bật/tắt thông báo ứng dụng',
@@ -90,20 +104,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 },
               ),
             ),
-            _buildSettingTile(
+            SettingTile(
               icon: Icons.dark_mode,
               title: 'Chế độ tối',
               subtitle: 'Giao diện tối cho mắt',
               trailing: Switch(
                 value: _darkModeEnabled,
-                onChanged: (value) {
-                  setState(() {
-                    _darkModeEnabled = value;
-                  });
+                onChanged: (value) async {
+                  final notifier = ref.read(themeModeProvider.notifier);
+                  await notifier.setThemeMode(value ? ThemeMode.dark : ThemeMode.light);
                 },
               ),
             ),
-            _buildSettingTile(
+            SettingTile(
               icon: Icons.fingerprint,
               title: 'Xác thực sinh trắc học',
               subtitle: 'Đăng nhập bằng vân tay/face ID',
@@ -120,22 +133,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             const SizedBox(height: 20),
             
             // Cài đặt tài chính
-            _buildSectionHeader('Cài đặt tài chính'),
-            _buildSettingTile(
+            const SettingSectionHeader(title: 'Cài đặt tài chính'),
+            SettingTile(
               icon: Icons.currency_exchange,
               title: 'Đơn vị tiền tệ',
               subtitle: _selectedCurrency,
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () => _showCurrencyPicker(),
             ),
-            _buildSettingTile(
+            SettingTile(
               icon: Icons.account_balance_wallet,
               title: 'Giới hạn chi tiêu',
               subtitle: '₫${NumberFormat('#,###').format(_budgetLimit)}',
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () => _showBudgetLimitDialog(),
             ),
-            _buildSettingTile(
+            SettingTile(
               icon: Icons.sync,
               title: 'Đồng bộ tự động',
               subtitle: 'Đồng bộ dữ liệu với cloud',
@@ -152,8 +165,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             const SizedBox(height: 20),
             
             // Cài đặt ngôn ngữ
-            _buildSectionHeader('Ngôn ngữ & Khu vực'),
-            _buildSettingTile(
+            const SettingSectionHeader(title: 'Ngôn ngữ & Khu vực'),
+            SettingTile(
               icon: Icons.language,
               title: 'Ngôn ngữ',
               subtitle: _selectedLanguage,
@@ -164,22 +177,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             const SizedBox(height: 20),
             
             // Cài đặt dữ liệu
-            _buildSectionHeader('Dữ liệu & Bảo mật'),
-            _buildSettingTile(
+            const SettingSectionHeader(title: 'Dữ liệu & Bảo mật'),
+            SettingTile(
               icon: Icons.backup,
               title: 'Sao lưu dữ liệu',
               subtitle: 'Tạo bản sao lưu',
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () => _showBackupDialog(),
             ),
-            _buildSettingTile(
+            SettingTile(
               icon: Icons.restore,
               title: 'Khôi phục dữ liệu',
               subtitle: 'Khôi phục từ bản sao lưu',
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () => _showRestoreDialog(),
             ),
-            _buildSettingTile(
+            SettingTile(
               icon: Icons.delete_forever,
               title: 'Xóa dữ liệu',
               subtitle: 'Xóa tất cả dữ liệu',
@@ -190,22 +203,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             const SizedBox(height: 20),
             
             // Thông tin ứng dụng
-            _buildSectionHeader('Thông tin ứng dụng'),
-            _buildSettingTile(
+            const SettingSectionHeader(title: 'Thông tin ứng dụng'),
+            SettingTile(
               icon: Icons.info,
               title: 'Phiên bản',
               subtitle: '1.0.0',
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () => _showAboutDialog(),
             ),
-            _buildSettingTile(
+            SettingTile(
               icon: Icons.privacy_tip,
               title: 'Chính sách bảo mật',
               subtitle: 'Đọc chính sách bảo mật',
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () => _showPrivacyPolicy(),
             ),
-            _buildSettingTile(
+            SettingTile(
               icon: Icons.description,
               title: 'Điều khoản sử dụng',
               subtitle: 'Đọc điều khoản sử dụng',
@@ -215,15 +228,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             
             const SizedBox(height: 20),
             
-            // Nút đăng xuất
+            // Nút thoát / đăng xuất
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: () => _showLogoutDialog(),
-                  icon: const Icon(Icons.logout),
-                  label: const Text('Đăng xuất'),
+                  onPressed: () => _showExitDialog(isLoggedIn: isLoggedIn),
+                  icon: const Icon(Icons.exit_to_app),
+                  label: Text(isLoggedIn ? 'Thoát và Đăng xuất' : 'Thoát'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red,
                     foregroundColor: Colors.white,
@@ -360,22 +373,32 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Số tiền (VND)',
-                border: OutlineInputBorder(),
-              ),
-              controller: TextEditingController(
-                text: _budgetLimit.toString(),
-              ),
-              onChanged: (value) {
-                final amount = double.tryParse(value);
-                if (amount != null) {
-                  setState(() {
-                    _budgetLimit = amount;
-                  });
-                }
+            StatefulBuilder(
+              builder: (context, setLocalState) {
+                final controller = TextEditingController(text: NumberFormat('#,###').format(_budgetLimit.round()));
+                return TextField(
+                  keyboardType: TextInputType.number,
+                  inputFormatters: <TextInputFormatter>[
+                    FilteringTextInputFormatter.digitsOnly,
+                    ThousandsSeparatorInputFormatter(),
+                  ],
+                  style: const TextStyle(color: Colors.black),
+                  decoration: const InputDecoration(
+                    labelText: 'Số tiền (VND)',
+                    border: OutlineInputBorder(),
+                  ),
+                  controller: controller,
+                  onChanged: (value) {
+                    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+                    final amount = double.tryParse(digits);
+                    if (amount != null) {
+                      setState(() {
+                        _budgetLimit = amount;
+                      });
+                      setLocalState(() {});
+                    }
+                  },
+                );
               },
             ),
           ],
@@ -569,29 +592,49 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  void _showLogoutDialog() {
+  void _showExitDialog({required bool isLoggedIn}) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Đăng xuất'),
-        content: const Text('Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng?'),
+        title: Text(isLoggedIn ? 'Thoát và đăng xuất' : 'Thoát ứng dụng'),
+        content: Text(
+          isLoggedIn
+              ? 'Bạn có chắc chắn muốn thoát và đăng xuất?'
+              : 'Bạn đang sử dụng chế độ không đăng nhập. Nếu thoát, dữ liệu cục bộ có thể mất. Hãy đăng nhập để sao lưu dữ liệu trước khi thoát.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Hủy'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Đã đăng xuất thành công!')),
-              );
+              try {
+                if (isLoggedIn) {
+                  await ref.read(currentUserProvider.notifier).clearCurrentUser();
+                  ref.read(apiServiceProvider).clearAccessToken();
+                }
+                if (!mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const WelcomePage()),
+                  (route) => false,
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Lỗi: $e')),
+                );
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Đăng xuất'),
+            child: Text(isLoggedIn ? 'Thoát và Đăng xuất' : 'Thoát'),
           ),
         ],
       ),
     );
   }
+
+  // Deprecated old method placeholder to avoid confusion
+  void _showLogoutDialog() {}
 }

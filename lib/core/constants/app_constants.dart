@@ -4,11 +4,16 @@ class AppConstants {
   static const String appVersion = '1.0.0';
   
   // API Endpoints
-  static const String baseUrl = 'https://your-api-domain.com/api';
+  static const String baseUrl = 'http://sochitieu.somee.com/api';
   static const String loginEndpoint = '/account/login';
   static const String registerEndpoint = '/account/register';
-  static const String incomeExpenseEndpoint = '/income-expense';
+  static const String incomeExpenseEndpoint = '/incomeexpense';
   static const String categoryEndpoint = '/category';
+  static const String accountMeEndpoint = '/account/me';
+  static const String reportOverviewEndpoint = '/report/overview';
+  static const String reportByCategoryEndpoint = '/report/by-category';
+  static const String reportByMonthEndpoint = '/report/by-month';
+  static const String settingsEndpoint = '/setting';
   
   // Database
   static const String databaseName = 'sochitieu.db';

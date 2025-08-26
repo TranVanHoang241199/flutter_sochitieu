@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_sochitieu/features/settings/settings_page.dart';
-import 'package:flutter_sochitieu/features/history/history_page.dart';
-import 'package:flutter_sochitieu/features/report/report_page.dart';
+import 'package:flutter_sochitieu/features/settings/presentation/pages/settings_page.dart';
+import 'package:flutter_sochitieu/features/history/presentation/pages/history_page.dart';
+import 'package:flutter_sochitieu/features/report/presentation/pages/report_page.dart';
 import 'overview_page.dart';
+import 'package:flutter_sochitieu/shared/providers/app_providers.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -21,6 +22,21 @@ class _HomePageState extends ConsumerState<HomePage> {
     const ReportPage(), 
     const SettingsPage(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Kick off a sync if user is logged in; don't block UI
+    // ignore: avoid_void_async
+    Future<void>(() async {
+      final user = ref.read(currentUserProvider);
+      if (user?.isOnline == true) {
+        final syncService = ref.read(syncServiceProvider);
+        // ignore: unawaited_futures
+        syncService.syncWhenOnline();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

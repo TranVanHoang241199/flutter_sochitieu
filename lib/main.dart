@@ -10,7 +10,7 @@ import 'shared/services/database_service.dart';
 import 'shared/services/api_service.dart';
 import 'shared/services/sync_service.dart';
 import 'shared/providers/app_providers.dart';
-import 'features/auth/pages/welcome_page.dart';
+import 'features/auth/presentation/pages/welcome_page.dart';
 import 'core/constants/app_constants.dart';
 
 void main() async {

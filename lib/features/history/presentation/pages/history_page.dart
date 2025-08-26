@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_sochitieu/shared/models/income_expense.dart';
+import 'package:flutter_sochitieu/shared/models/category.dart';
 import 'package:flutter_sochitieu/shared/providers/app_providers.dart';
+import 'package:intl/intl.dart';
 
 class HistoryPage extends ConsumerStatefulWidget {
   const HistoryPage({super.key});
@@ -96,7 +98,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(color: Colors.grey[300]!),
-                                ),
+                                ),    
                                 child: TextField(
                                   controller: _searchController,
                                   decoration: const InputDecoration(
@@ -187,56 +189,96 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                               ),
                             ],
                           ),
-                          child: Column(
+                          child: Row(
                             children: [
                               // Thu nhập
-                              Row(
-                                children: [
-                                  Icon(Icons.account_balance_wallet, color: Colors.green, size: 20),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Thu: ${_formatCurrency(totalIncome)}',
-                                    style: TextStyle(
-                                      color: Colors.green,
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 16,
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.account_balance_wallet, color: Colors.green, size: 24),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Thu',
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 4),
+                                                                         GestureDetector(
+                                        onTap: _showCurrencyDialog,
+                                        child: Text(
+                                          '${_formatCurrency(totalIncome)} $_selectedCurrency',
+                                          style: TextStyle(
+                                            color: Colors.green,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
-                              const SizedBox(height: 8),
                               
                               // Chi tiêu
-                              Row(
-                                children: [
-                                  Icon(Icons.shopping_cart, color: Colors.red, size: 20),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Chi: ${_formatCurrency(totalExpense)}',
-                                    style: TextStyle(
-                                      color: Colors.red,
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 16,
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.shopping_cart, color: Colors.red, size: 24),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Chi',
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 4),
+                                                                         GestureDetector(
+                                        onTap: _showCurrencyDialog,
+                                        child: Text(
+                                          '${_formatCurrency(totalExpense)} $_selectedCurrency',
+                                          style: TextStyle(
+                                            color: Colors.red,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
-                              const SizedBox(height: 8),
                               
                               // Còn lại
-                              Row(
-                                children: [
-                                  Icon(Icons.savings, color: Colors.orange, size: 20),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Còn: ${_formatCurrency(remaining)}',
-                                    style: TextStyle(
-                                      color: Colors.orange,
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 16,
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.savings, color: Colors.orange, size: 24),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Còn',
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 4),
+                                                                         GestureDetector(
+                                        onTap: _showCurrencyDialog,
+                                        child: Text(
+                                          '${_formatCurrency(remaining)} $_selectedCurrency',
+                                          style: TextStyle(
+                                            color: Colors.orange,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
@@ -374,6 +416,29 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   }
 
   Widget _buildTransactionCard(IncomeExpense transaction) {
+    final categories = ref.read(categoriesProvider);
+    final Category? cat = categories.firstWhere(
+      (c) => c.id == transaction.categoryId,
+      orElse: () => Category(
+        id: 'unknown',
+        text: 'Không xác định',
+        icon: '📁',
+        color: '#CCCCCC',
+        order: 0,
+        type: transaction.type,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    );
+
+    final Color badgeColor = Color(int.parse('0xFF${(cat?.color ?? '#CCCCCC').substring(1)}'))
+        .withOpacity(0.2);
+    final Color edgeColor = Color(int.parse('0xFF${(cat?.color ?? '#CCCCCC').substring(1)}'));
+
+    final String currencyUnit = transaction.currency ?? _selectedCurrency;
+    final String sign = transaction.type == IncomeExpenseType.income ? '+' : '-';
+    final String formattedAmount = NumberFormat.decimalPattern('vi_VN').format(transaction.amount.round());
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -388,17 +453,15 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
             width: 50,
             height: 50,
             decoration: BoxDecoration(
-              color: transaction.type == IncomeExpenseType.income
-                  ? Colors.green.withOpacity(0.2)
-                  : Colors.red.withOpacity(0.2),
+              color: badgeColor,
               borderRadius: BorderRadius.circular(25),
+              border: Border.all(color: edgeColor, width: 1),
             ),
-            child: Icon(
-              _getCategoryIcon(transaction.description ?? ''),
-              color: transaction.type == IncomeExpenseType.income
-                  ? Colors.green
-                  : Colors.red,
-              size: 24,
+            child: Center(
+              child: Text(
+                cat?.icon ?? '📁',
+                style: const TextStyle(fontSize: 22),
+              ),
             ),
           ),
           
@@ -418,7 +481,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'loai 1', // Có thể thay bằng category name thực tế
+                  cat?.text ?? 'Không xác định',
                   style: TextStyle(
                     color: Colors.grey[600],
                     fontSize: 12,
@@ -429,34 +492,32 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
           ),
           
           // Số tiền
-          Text(
-            '${transaction.type == IncomeExpenseType.income ? '+' : '-'}${_formatCurrency(transaction.amount)} ₫',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: transaction.type == IncomeExpenseType.income
-                  ? Colors.green
-                  : Colors.red,
+          Flexible(
+            flex: 0,
+            child: FittedBox( 
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: InkWell(
+                onTap: _showCurrencyDialog,
+                child: Text(
+                  '$sign$formattedAmount $currencyUnit',
+                  maxLines: 1,
+                  softWrap: false,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: transaction.type == IncomeExpenseType.income
+                        ? Colors.green
+                        : Colors.red,
+                  ),
+                ),
+              ),
             ),
           ),
         ],
       ),
     );
-  }
-
-  IconData _getCategoryIcon(String description) {
-    if (description.toLowerCase().contains('thưởng') || 
-        description.toLowerCase().contains('bonus')) {
-      return Icons.celebration;
-    } else if (description.toLowerCase().contains('ăn') || 
-               description.toLowerCase().contains('uống')) {
-      return Icons.lightbulb;
-    } else if (description.toLowerCase().contains('đi lại')) {
-      return Icons.directions_car;
-    } else if (description.toLowerCase().contains('mua sắm')) {
-      return Icons.shopping_bag;
-    }
-    return Icons.category;
   }
 
   List<IncomeExpense> _getFilteredTransactions(List<IncomeExpense> allTransactions) {
@@ -534,12 +595,14 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   }
 
   String _formatCurrency(double amount) {
-    if (amount >= 1000000) {
-      return '${(amount / 1000000).toStringAsFixed(1)}M';
+    if (amount >= 1000000000) {
+      return '${(amount / 1000000000).toStringAsFixed(1)} tỷ';
+    } else if (amount >= 1000000) {
+      return '${(amount / 1000000).toStringAsFixed(1)} triệu';
     } else if (amount >= 1000) {
-      return '${(amount / 1000).toStringAsFixed(0)}K';
+      return '${(amount / 1000).toStringAsFixed(0)} nghìn';
     }
-    return amount.toStringAsFixed(0);
+    return NumberFormat.decimalPattern('vi_VN').format(amount.round());
   }
 
   void _showCurrencyDialog() {

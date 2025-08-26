@@ -31,11 +31,31 @@ class SyncService {
     try {
       // Lấy danh mục từ server
       final categoriesResult = await _apiService.getCategories();
-      if (categoriesResult['success']) {
+      if (categoriesResult['success'] == true) {
         final List<dynamic> categoriesData = categoriesResult['data'];
-        for (final categoryData in categoriesData) {
-          final category = Category.fromJson(categoryData);
-          await _databaseService.insertCategory(category);
+        final nowIso = DateTime.now().toIso8601String();
+        for (final raw in categoriesData) {
+          try {
+            final m = Map<String, dynamic>.from(raw as Map);
+            m['createdAt'] ??= nowIso;
+            m['updatedAt'] ??= nowIso;
+            m['order'] ??= 0;
+            // Chuẩn hóa type: có thể là int hoặc chuỗi
+            final t = m['type'];
+            if (t is String) {
+              final lower = t.toLowerCase();
+              m['type'] = (lower.contains('income'))
+                  ? IncomeExpenseType.income.index
+                  : IncomeExpenseType.expense.index;
+            } else if (t is bool) {
+              // Ví dụ: true=income, false=expense (tùy backend)
+              m['type'] = t ? IncomeExpenseType.income.index : IncomeExpenseType.expense.index;
+            }
+            final category = Category.fromJson(m);
+            await _databaseService.insertCategory(category);
+          } catch (_) {
+            // Bỏ qua record lỗi để không chặn đồng bộ
+          }
         }
       }
 
@@ -43,11 +63,30 @@ class SyncService {
       final incomeExpensesResult = await _apiService.getIncomeExpenses(
         pageSize: 1000, // Lấy tất cả giao dịch
       );
-      if (incomeExpensesResult['success']) {
+      if (incomeExpensesResult['success'] == true) {
         final List<dynamic> incomeExpensesData = incomeExpensesResult['data'];
-        for (final incomeExpenseData in incomeExpensesData) {
-          final incomeExpense = IncomeExpense.fromJson(incomeExpenseData);
-          await _databaseService.insertIncomeExpense(incomeExpense);
+        for (final raw in incomeExpensesData) {
+          try {
+            final m = Map<String, dynamic>.from(raw as Map);
+            // Đảm bảo các trường tối thiểu tồn tại
+            if (m['date'] == null && m['createdAt'] != null) {
+              m['date'] = m['createdAt'];
+            }
+            // type chuẩn hóa về int index nếu cần
+            final t = m['type'];
+            if (t is String) {
+              final lower = t.toLowerCase();
+              m['type'] = (lower.contains('income'))
+                  ? IncomeExpenseType.income.index
+                  : IncomeExpenseType.expense.index;
+            } else if (t is bool) {
+              m['type'] = t ? IncomeExpenseType.income.index : IncomeExpenseType.expense.index;
+            }
+            final incomeExpense = IncomeExpense.fromJson(m);
+            await _databaseService.insertIncomeExpense(incomeExpense);
+          } catch (_) {
+            // Bỏ qua record lỗi để không chặn đồng bộ
+          }
         }
       }
 
@@ -80,7 +119,7 @@ class SyncService {
           categories: unsyncedCategories,
         );
 
-        if (syncResult['success']) {
+        if (syncResult['success'] == true) {
           // Đánh dấu đã đồng bộ
           for (final category in unsyncedCategories) {
             await _databaseService.markAsSynced('categories', category.id);

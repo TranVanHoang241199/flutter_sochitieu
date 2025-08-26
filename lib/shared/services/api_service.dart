@@ -65,22 +65,131 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = response.data;
-        if (data['success'] == true) {
-          final userData = data['data'];
-          setAccessToken(userData['accessToken']);
-          
+
+        // Common flags/structures from various backends
+        final bool successFlag =
+            (data is Map && (data['success'] == true || data['isSuccess'] == true)) ||
+            (data is Map && data['data'] != null);
+
+        // Try to extract payload from multiple shapes
+        final dynamic payload =
+            (data is Map && data['data'] != null) ? data['data'] : data;
+
+        // Extract tokens with multiple key possibilities
+        final String? accessToken = (payload is Map)
+            ? (payload['accessToken'] ?? payload['token'] ?? payload['access_token']) as String?
+            : (data['accessToken'] ?? data['token'] ?? data['access_token']) as String?;
+        final String? refreshToken = (payload is Map)
+            ? (payload['refreshToken'] ?? payload['refresh_token']) as String?
+            : (data['refreshToken'] ?? data['refresh_token']) as String?;
+
+        // Extract user object from multiple locations / key names
+        dynamic userJson = (payload is Map)
+            ? (payload['user'] ?? payload['account'] ?? payload['profile'])
+            : null;
+        if (userJson == null && data is Map) {
+          userJson = data['user'] ?? data['account'] ?? data['profile'];
+        }
+
+        // If user not wrapped, sometimes backend returns user fields at root
+        if (userJson == null && payload is Map) {
+          final possibleUserKeys = ['id', 'userName', 'username', 'fullName'];
+          final hasUserShape = possibleUserKeys.any((k) => payload.containsKey(k));
+          if (hasUserShape) userJson = payload;
+        }
+
+        if (accessToken != null && userJson is Map) {
+          // Normalize user fields and fill missing values
+          final nowIso = DateTime.now().toIso8601String();
+          final normalized = <String, dynamic>{
+            'id': userJson['id'] ?? userJson['userId'] ?? userJson['uid'] ?? userName,
+            'userName': userJson['userName'] ?? userJson['username'] ?? userName,
+            'email': userJson['email'],
+            'fullName': userJson['fullName'] ?? userJson['name'] ?? userJson['displayName'],
+            'phone': userJson['phone'],
+            'avatar': userJson['avatar'] ?? userJson['avatarUrl'],
+            'createdAt': userJson['createdAt'] ?? nowIso,
+            'updatedAt': userJson['updatedAt'] ?? nowIso,
+            'isOnline': true,
+            'accessToken': accessToken,
+            'refreshToken': refreshToken,
+          };
+
+          try {
+            final user = User.fromJson(normalized);
+            setAccessToken(accessToken);
+            return {
+              'success': true,
+              'user': user,
+              'accessToken': accessToken,
+              'refreshToken': refreshToken,
+            };
+          } catch (_) {
+            // Fallback: build User minimally if adapter parsing is strict
+            final user = User(
+              id: normalized['id'],
+              userName: normalized['userName'],
+              email: normalized['email'],
+              fullName: normalized['fullName'],
+              phone: normalized['phone'],
+              avatar: normalized['avatar'],
+              createdAt: DateTime.parse(normalized['createdAt']),
+              updatedAt: DateTime.parse(normalized['updatedAt']),
+              isOnline: true,
+              accessToken: accessToken,
+              refreshToken: refreshToken,
+            );
+            setAccessToken(accessToken);
+            return {
+              'success': true,
+              'user': user,
+              'accessToken': accessToken,
+              'refreshToken': refreshToken,
+            };
+          }
+        }
+
+        // If backend uses boolean flags but no tokens/user provided
+        if (successFlag) {
           return {
-            'success': true,
-            'user': User.fromJson(userData['user']),
-            'accessToken': userData['accessToken'],
-            'refreshToken': userData['refreshToken'],
+            'success': false,
+            'message': data['message'] ?? 'Thiếu thông tin user hoặc token từ máy chủ',
           };
         }
       }
-      
       return {
         'success': false,
-        'message': response.data['message'] ?? 'Đăng nhập thất bại',
+        'message': response.data is Map ? (response.data['message'] ?? 'Đăng nhập thất bại') : 'Đăng nhập thất bại',
+      };
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': _handleDioError(e),
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Đã xảy ra lỗi không xác định',
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> me() async {
+    try {
+      final response = await _dio.get(AppConstants.accountMeEndpoint);
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data['success'] == true) {
+          final userData = data['data'];
+          return {
+            'success': true,
+            'user': User.fromJson(userData),
+          };
+        }
+      }
+      return {
+        'success': false,
+        'message': response.data['message'] ?? 'Lấy thông tin người dùng thất bại',
       };
     } on DioException catch (e) {
       return {
@@ -330,6 +439,235 @@ class ApiService {
       return {
         'success': false,
         'message': response.data['message'] ?? 'Lấy danh mục thất bại',
+      };
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': _handleDioError(e),
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Đã xảy ra lỗi không xác định',
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> updateCategory(Category category) async {
+    try {
+      final response = await _dio.put(
+        '${AppConstants.categoryEndpoint}/${category.id}',
+        data: {
+          'name': category.name,
+          'text': category.text,
+          'icon': category.icon,
+          'color': category.color,
+          'order': category.order,
+          'type': category.type.index,
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data['success'] == true) {
+          return {
+            'success': true,
+            'data': data['data'],
+            'message': 'Cập nhật danh mục thành công',
+          };
+        }
+      }
+      return {
+        'success': false,
+        'message': response.data['message'] ?? 'Cập nhật danh mục thất bại',
+      };
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': _handleDioError(e),
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Đã xảy ra lỗi không xác định',
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> deleteCategory(String id) async {
+    try {
+      final response = await _dio.delete('${AppConstants.categoryEndpoint}/$id');
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data['success'] == true) {
+          return {
+            'success': true,
+            'message': 'Xóa danh mục thành công',
+          };
+        }
+      }
+      return {
+        'success': false,
+        'message': response.data['message'] ?? 'Xóa danh mục thất bại',
+      };
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': _handleDioError(e),
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Đã xảy ra lỗi không xác định',
+      };
+    }
+  }
+
+  // Report APIs
+  Future<Map<String, dynamic>> getReportOverview({String? from, String? to}) async {
+    try {
+      final response = await _dio.get(
+        AppConstants.reportOverviewEndpoint,
+        queryParameters: {
+          if (from != null) 'from': from,
+          if (to != null) 'to': to,
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data['success'] == true) {
+          return {
+            'success': true,
+            'data': data['data'],
+          };
+        }
+      }
+      return {
+        'success': false,
+        'message': response.data['message'] ?? 'Lấy báo cáo tổng quan thất bại',
+      };
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': _handleDioError(e),
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Đã xảy ra lỗi không xác định',
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getReportByCategory({required int year, required int month}) async {
+    try {
+      final response = await _dio.get(
+        AppConstants.reportByCategoryEndpoint,
+        queryParameters: {'year': year, 'month': month},
+      );
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data['success'] == true) {
+          return {
+            'success': true,
+            'data': data['data'],
+          };
+        }
+      }
+      return {
+        'success': false,
+        'message': response.data['message'] ?? 'Lấy báo cáo theo danh mục thất bại',
+      };
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': _handleDioError(e),
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Đã xảy ra lỗi không xác định',
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getReportByMonth({required int year}) async {
+    try {
+      final response = await _dio.get(
+        AppConstants.reportByMonthEndpoint,
+        queryParameters: {'year': year},
+      );
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data['success'] == true) {
+          return {
+            'success': true,
+            'data': data['data'],
+          };
+        }
+      }
+      return {
+        'success': false,
+        'message': response.data['message'] ?? 'Lấy báo cáo theo tháng thất bại',
+      };
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': _handleDioError(e),
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Đã xảy ra lỗi không xác định',
+      };
+    }
+  }
+
+  // Settings APIs
+  Future<Map<String, dynamic>> getSettings() async {
+    try {
+      final response = await _dio.get(AppConstants.settingsEndpoint);
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data['success'] == true) {
+          return {
+            'success': true,
+            'data': data['data'],
+          };
+        }
+      }
+      return {
+        'success': false,
+        'message': response.data['message'] ?? 'Lấy cài đặt thất bại',
+      };
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': _handleDioError(e),
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Đã xảy ra lỗi không xác định',
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> updateSettings(Map<String, dynamic> settings) async {
+    try {
+      final response = await _dio.put(AppConstants.settingsEndpoint, data: settings);
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data['success'] == true) {
+          return {
+            'success': true,
+            'data': data['data'],
+            'message': 'Cập nhật cài đặt thành công',
+          };
+        }
+      }
+      return {
+        'success': false,
+        'message': response.data['message'] ?? 'Cập nhật cài đặt thất bại',
       };
     } on DioException catch (e) {
       return {

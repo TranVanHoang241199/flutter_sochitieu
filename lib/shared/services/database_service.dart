@@ -151,9 +151,12 @@ class DatabaseService {
   // User operations
   Future<void> insertUser(User user) async {
     final db = await database;
+    final data = user.toJson();
+    // Chuẩn hóa kiểu bool -> int cho SQLite
+    data['isOnline'] = (user.isOnline ? 1 : 0);
     await db.insert(
       'users',
-      user.toJson(),
+      data,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -188,9 +191,11 @@ class DatabaseService {
 
   Future<void> updateUser(User user) async {
     final db = await database;
+    final data = user.toJson();
+    data['isOnline'] = (user.isOnline ? 1 : 0);
     await db.update(
       'users',
-      user.toJson(),
+      data,
       where: 'id = ?',
       whereArgs: [user.id],
     );
@@ -210,13 +215,16 @@ class DatabaseService {
     try {
       final db = await database;
       print('Đang insert category: ${category.text} với data: ${category.toJson()}');
-      
+      // Chuẩn hóa map cho table (loại bỏ field 'order' vì không có cột này)
+      final map = Map<String, dynamic>.from(category.toJson());
+      map.remove('order');
+      map['orderIndex'] = category.order;
+      // Convert bool -> int
+      map['isSynced'] = category.isSynced ? 1 : 0;
+
       final result = await db.insert(
         'categories',
-        {
-          ...category.toJson(),
-          'orderIndex': category.order,
-        },
+        map,
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
       
@@ -250,10 +258,11 @@ class DatabaseService {
       print('Query categories trả về ${maps.length} kết quả: ${maps.map((m) => m['text'] ?? m['name']).toList()}');
 
       final categories = List.generate(maps.length, (i) {
-        return Category.fromJson({
-          ...maps[i],
-          'order': maps[i]['orderIndex'],
-        });
+        final row = Map<String, dynamic>.from(maps[i]);
+        // Chuẩn hóa cột
+        row['order'] = row['orderIndex'];
+        row['isSynced'] = (row['isSynced'] == 1);
+        return Category.fromJson(row);
       });
 
       print('Đã convert thành ${categories.length} Category objects: ${categories.map((c) => c.text).toList()}');
@@ -283,12 +292,13 @@ class DatabaseService {
 
   Future<void> updateCategory(Category category) async {
     final db = await database;
+    final map = Map<String, dynamic>.from(category.toJson());
+    map.remove('order');
+    map['orderIndex'] = category.order;
+    map['isSynced'] = category.isSynced ? 1 : 0;
     await db.update(
       'categories',
-      {
-        ...category.toJson(),
-        'orderIndex': category.order,
-      },
+      map,
       where: 'id = ?',
       whereArgs: [category.id],
     );

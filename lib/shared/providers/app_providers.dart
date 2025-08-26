@@ -2,6 +2,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_sochitieu/core/constants/app_constants.dart';
 import '../services/database_service.dart';
 import '../services/api_service.dart';
 import '../services/sync_service.dart';
@@ -24,6 +25,13 @@ final syncServiceProvider = Provider<SyncService>((ref) {
   return SyncService(databaseService, apiService);
 });
 
+// Report Providers (API)
+final reportOverviewProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final api = ref.read(apiServiceProvider);
+  final result = await api.getReportOverview();
+  return result;
+});
+
 // SharedPreferences Provider
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError();
@@ -44,7 +52,7 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
   Future<void> _loadThemeMode() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final themeIndex = prefs.getInt('theme_mode') ?? 0;
+      final themeIndex = prefs.getInt(AppConstants.themeKey) ?? ThemeMode.system.index;
       state = ThemeMode.values[themeIndex];
     } catch (e) {
       state = ThemeMode.system;
@@ -54,7 +62,7 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
   Future<void> setThemeMode(ThemeMode mode) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('theme_mode', mode.index);
+      await prefs.setInt(AppConstants.themeKey, mode.index);
       state = mode;
     } catch (e) {
       // Handle error
@@ -117,18 +125,32 @@ class CurrentUserNotifier extends StateNotifier<User?> {
 // Income Expense Providers
 final incomeExpensesProvider = StateNotifierProvider<IncomeExpensesNotifier, List<IncomeExpense>>((ref) {
   final databaseService = ref.read(databaseServiceProvider);
-  return IncomeExpensesNotifier(databaseService);
+  final api = ref.read(apiServiceProvider);
+  return IncomeExpensesNotifier(databaseService, api);
 });
 
 class IncomeExpensesNotifier extends StateNotifier<List<IncomeExpense>> {
   final DatabaseService _databaseService;
+  final ApiService _apiService;
   
-  IncomeExpensesNotifier(this._databaseService) : super([]) {
+  IncomeExpensesNotifier(this._databaseService, this._apiService) : super([]) {
     _loadIncomeExpenses();
   }
 
   Future<void> _loadIncomeExpenses() async {
     try {
+      if (await _apiService.checkConnectivity()) {
+        final result = await _apiService.getIncomeExpenses();
+        if (result['success'] == true) {
+          final List<dynamic> list = result['data'] as List<dynamic>;
+          final fetched = list.map((e) => IncomeExpense.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+          for (final it in fetched) {
+            try { await _databaseService.insertIncomeExpense(it); } catch (_) {}
+          }
+          state = fetched;
+          return;
+        }
+      }
       final incomeExpenses = await _databaseService.getIncomeExpenses();
       state = incomeExpenses;
     } catch (e) {
@@ -138,8 +160,11 @@ class IncomeExpensesNotifier extends StateNotifier<List<IncomeExpense>> {
 
   Future<void> addIncomeExpense(IncomeExpense incomeExpense) async {
     try {
+      if (await _apiService.checkConnectivity()) {
+        await _apiService.createIncomeExpense(incomeExpense);
+      }
       await _databaseService.insertIncomeExpense(incomeExpense);
-      state = [incomeExpense, ...state];
+      state = [incomeExpense, ...state.where((e) => e.id != incomeExpense.id)];
     } catch (e) {
       // Handle error
     }
@@ -147,6 +172,9 @@ class IncomeExpensesNotifier extends StateNotifier<List<IncomeExpense>> {
 
   Future<void> updateIncomeExpense(IncomeExpense incomeExpense) async {
     try {
+      if (await _apiService.checkConnectivity()) {
+        await _apiService.updateIncomeExpense(incomeExpense);
+      }
       await _databaseService.updateIncomeExpense(incomeExpense);
       state = state.map((item) => item.id == incomeExpense.id ? incomeExpense : item).toList();
     } catch (e) {
@@ -156,6 +184,9 @@ class IncomeExpensesNotifier extends StateNotifier<List<IncomeExpense>> {
 
   Future<void> deleteIncomeExpense(String id) async {
     try {
+      if (await _apiService.checkConnectivity()) {
+        await _apiService.deleteIncomeExpense(id);
+      }
       await _databaseService.deleteIncomeExpense(id);
       state = state.where((item) => item.id != id).toList();
     } catch (e) {
@@ -171,18 +202,39 @@ class IncomeExpensesNotifier extends StateNotifier<List<IncomeExpense>> {
 // Category Providers
 final categoriesProvider = StateNotifierProvider<CategoriesNotifier, List<Category>>((ref) {
   final databaseService = ref.read(databaseServiceProvider);
-  return CategoriesNotifier(databaseService);
+  final api = ref.read(apiServiceProvider);
+  return CategoriesNotifier(databaseService, api);
 });
 
 class CategoriesNotifier extends StateNotifier<List<Category>> {
   final DatabaseService _databaseService;
+  final ApiService _apiService;
   
-  CategoriesNotifier(this._databaseService) : super([]) {
+  CategoriesNotifier(this._databaseService, this._apiService) : super([]) {
     _loadCategories();
   }
 
   Future<void> _loadCategories() async {
     try {
+      if (await _apiService.checkConnectivity()) {
+        final result = await _apiService.getCategories();
+        if (result['success'] == true) {
+          final List<dynamic> list = result['data'] as List<dynamic>;
+          final now = DateTime.now();
+          final fetched = list.map((e) {
+            final m = Map<String, dynamic>.from(e as Map);
+            m['createdAt'] ??= now.toIso8601String();
+            m['updatedAt'] ??= now.toIso8601String();
+            m['order'] ??= 0;
+            return Category.fromJson(m);
+          }).toList();
+          for (final c in fetched) {
+            try { await _databaseService.insertCategory(c); } catch (_) {}
+          }
+          state = fetched;
+          return;
+        }
+      }
       print('Đang load categories từ database...');
       final categories = await _databaseService.getCategories();
       print('Đã load được ${categories.length} categories: ${categories.map((c) => c.text).toList()}');
@@ -279,8 +331,11 @@ class CategoriesNotifier extends StateNotifier<List<Category>> {
 
   Future<void> addCategory(Category category) async {
     try {
+      if (await _apiService.checkConnectivity()) {
+        await _apiService.createCategory(category);
+      }
       await _databaseService.insertCategory(category);
-      state = [...state, category];
+      state = [...state.where((c) => c.id != category.id), category];
     } catch (e) {
       print('Lỗi khi thêm category: $e');
     }
@@ -288,6 +343,9 @@ class CategoriesNotifier extends StateNotifier<List<Category>> {
 
   Future<void> updateCategory(Category category) async {
     try {
+      if (await _apiService.checkConnectivity()) {
+        await _apiService.updateCategory(category);
+      }
       await _databaseService.updateCategory(category);
       state = state.map((item) => item.id == category.id ? category : item).toList();
     } catch (e) {
@@ -297,6 +355,9 @@ class CategoriesNotifier extends StateNotifier<List<Category>> {
 
   Future<void> deleteCategory(String id) async {
     try {
+      if (await _apiService.checkConnectivity()) {
+        await _apiService.deleteCategory(id);
+      }
       await _databaseService.deleteCategory(id);
       state = state.where((item) => item.id != id).toList();
     } catch (e) {

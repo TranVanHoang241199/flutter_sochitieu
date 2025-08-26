@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../shared/providers/app_providers.dart';
-import '../../../shared/models/income_expense.dart';
+import '../../../../shared/providers/app_providers.dart';
+import '../../../../shared/models/income_expense.dart';
+import '../../../../shared/models/category.dart';
+import 'package:uuid/uuid.dart';
+import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
+import '../../../../shared/utils/formatters.dart';
 
 class OverviewPage extends ConsumerStatefulWidget {
   const OverviewPage({super.key});
@@ -23,6 +28,8 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
   void initState() {
     super.initState();
     _amountController.text = '0';
+    // Đảm bảo danh mục được nạp/seed khi vào lần đầu (offline cũng có dữ liệu mặc định)
+    Future.microtask(() => ref.read(categoriesProvider.notifier).refresh());
   }
 
   @override
@@ -41,9 +48,9 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
     // Lọc giao dịch theo thời gian được chọn
     final filteredTransactions = _getFilteredTransactions(incomeExpenses);
     
-    // Tính toán thống kê tháng
-    double totalIncome = 1000000;
-    double totalExpense = 2000;
+    // Tính toán thống kê theo bộ lọc hiện tại
+    double totalIncome = 0;
+    double totalExpense = 0;
     for (var transaction in filteredTransactions) {
       if (transaction.type == IncomeExpenseType.income) {
         totalIncome += transaction.amount;
@@ -123,9 +130,9 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(
-                                'Tháng này',
+                                _selectedTimeFilter,
                                 style: TextStyle(
-                                  fontSize: 14,
+                                  fontSize: 12,
                                   color: Colors.pink[400],
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -137,7 +144,7 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
                                   Text(
-                                    'Thu: ${_formatCurrency(totalIncome)}',
+                                    'Thu: ${_formatFullCurrency(totalIncome, _selectedCurrency)}',
                                     style: TextStyle(
                                       color: Colors.green,
                                       fontWeight: FontWeight.w500,
@@ -154,7 +161,7 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
                                   Text(
-                                    'Chi: ${_formatCurrency(totalExpense)}',
+                                    'Chi: ${_formatFullCurrency(totalExpense, _selectedCurrency)}',
                                     style: TextStyle(
                                       color: Colors.red,
                                       fontWeight: FontWeight.w500,
@@ -171,7 +178,7 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
                                   Text(
-                                    'Còn: ${_formatCurrency(remaining)}',
+                                    'Còn: ${_formatFullCurrency(remaining, _selectedCurrency)}',
                                     style: TextStyle(
                                       color: Colors.orange,
                                       fontWeight: FontWeight.w500,
@@ -239,7 +246,7 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
                     
                     // Ngày
                     _buildInputField(
-                      'Ngày *:',
+                      'Ngày:',
                       '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
                       onTap: _selectDate,
                     ),
@@ -250,12 +257,13 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
                       'Ghi chú :',
                       'Mô tả khoản ${_selectedType == IncomeExpenseType.income ? 'thu' : 'chi'}...',
                       controller: _descriptionController,
+                      keyboardType: TextInputType.text,
                     ),
                     const SizedBox(height: 16),
                     
                     // Số tiền
                     _buildInputField(
-                      'Số tiền *:',
+                      'Số tiền:',
                       '0',
                       controller: _amountController,
                       keyboardType: TextInputType.number,
@@ -268,8 +276,32 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
                         height: 80,
                         child: ListView.builder(
                           scrollDirection: Axis.horizontal,
-                          itemCount: filteredCategories.length,
+                          itemCount: filteredCategories.length + 1,
                           itemBuilder: (context, index) {
+                            if (index == filteredCategories.length) {
+                              return Container(
+                                margin: const EdgeInsets.only(right: 12),
+                                child: InkWell(
+                                  onTap: _showAddCategoryDialog,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    width: 100,
+                                    decoration: BoxDecoration(
+                                      color: Colors.pink[300],
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: const [
+                                        Icon(Icons.add, color: Colors.white, size: 20),
+                                        SizedBox(width: 6),
+                                        Text('Thêm mới', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
                             final category = filteredCategories[index];
                             final isSelected = _selectedCategory == category.id;
                             
@@ -559,7 +591,7 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
       children: [
         // Label
         SizedBox(
-          width: 70, // Độ rộng cố định cho label
+          width: 80, // Tăng độ rộng label để cân đối hơn
           child: Text(
             label,
             style: TextStyle(
@@ -575,38 +607,67 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
           child: GestureDetector(
             onTap: onTap,
             child: Container(
-              height: 50,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              height: 50, // Cố định chiều cao cho tất cả input
+              width: double.infinity, // Đảm bảo chiều rộng đầy đủ
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.grey[50],
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.grey[300]!),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center, // Căn giữa theo chiều dọc
                 children: [
                   if (icon != null) ...[
                     Icon(icon, color: Colors.grey[600], size: 20),
                     const SizedBox(width: 12),
                   ],
-                  Expanded(
-                    child: controller != null
-                        ? TextField(
-                            controller: controller,
-                            keyboardType: keyboardType,
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              hintText: '',
-                            ),
-                          )
-                        : Text(
-                            hint,
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 16,
-                            ),
-                          ),
-                  ),
-                  if (suffix != null) suffix,
+                                     Expanded(
+                     child: controller != null
+                         ? TextField(
+                             controller: controller,
+                             keyboardType: keyboardType,
+                             maxLines: 1,
+                             textCapitalization: keyboardType == TextInputType.text 
+                                 ? TextCapitalization.sentences 
+                                 : TextCapitalization.none,
+                             textInputAction: keyboardType == TextInputType.text 
+                                 ? TextInputAction.done 
+                                 : TextInputAction.next,
+                             expands: false,
+                             inputFormatters: keyboardType == TextInputType.number
+                                 ? [
+                                     FilteringTextInputFormatter.digitsOnly,
+                                     ThousandsSeparatorInputFormatter(locale: 'vi_VN'),
+                                   ]
+                                 : null,
+                             style: const TextStyle(color: Colors.black),
+                             decoration: InputDecoration(
+                               border: InputBorder.none,
+                               hintText: keyboardType == TextInputType.text ? hint : '',
+                               contentPadding: EdgeInsets.zero,
+                               isDense: true,
+                             ),
+                           )
+                         : Center( // Căn giữa text hint
+                             child: Text(
+                               hint,
+                               style: TextStyle(
+                                 color: Colors.grey[600],
+                                 fontSize: 16,
+                               ),
+                             ),
+                           ),
+                   ),
+                   if (suffix != null) 
+                     Transform.translate(
+                       offset: const Offset(16, 0), // Di chuyển sang phải 16px để phun sát viền
+                       child: Container(
+                         width: MediaQuery.of(context).size.width * 0.2, // Chiếm 1/5 chiều rộng màn hình
+                         height: 50, // Cùng chiều cao với input
+                         child: suffix,
+                       ),
+                     ),
                 ],
               ),
             ),
@@ -618,19 +679,25 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
 
   Widget _buildCurrencyDropdown() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      width: double.infinity,
+      height: double.infinity,
       decoration: BoxDecoration(
         color: Colors.red[400],
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: const BorderRadius.only(
+          topRight: Radius.circular(8),
+          bottomRight: Radius.circular(8),
+        ),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
             _selectedCurrency,
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
+              fontSize: 16,
             ),
           ),
           const SizedBox(width: 4),
@@ -645,6 +712,25 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
   }
 
   Widget _buildTransactionItem(IncomeExpense transaction) {
+    final categories = ref.read(categoriesProvider);
+    final Category? cat = categories.firstWhere(
+      (c) => c.id == transaction.categoryId,
+      orElse: () => Category(
+        id: 'unknown',
+        text: 'Không xác định',
+        icon: '📁',
+        color: '#CCCCCC',
+        order: 0,
+        type: transaction.type,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    );
+
+    final Color badgeColor = Color(int.parse('0xFF${(cat?.color ?? '#CCCCCC').substring(1)}'))
+        .withOpacity(0.2);
+    final Color edgeColor = Color(int.parse('0xFF${(cat?.color ?? '#CCCCCC').substring(1)}'));
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -657,21 +743,18 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
         children: [
           // Icon và màu sắc
           Container(
-            padding: const EdgeInsets.all(8),
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
-              color: transaction.type == IncomeExpenseType.income
-                  ? Colors.green.withOpacity(0.2)
-                  : Colors.red.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
+              color: badgeColor,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: edgeColor, width: 1),
             ),
-            child: Icon(
-              transaction.type == IncomeExpenseType.income
-                  ? Icons.trending_up
-                  : Icons.trending_down,
-              color: transaction.type == IncomeExpenseType.income
-                  ? Colors.green
-                  : Colors.red,
-              size: 20,
+            child: Center(
+              child: Text(
+                cat?.icon ?? '📁',
+                style: const TextStyle(fontSize: 22),
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -692,7 +775,7 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Ngày ${transaction.date.day}-${transaction.date.month}-${transaction.date.year}',
+                  '${cat?.text ?? 'Không xác định'} · Ngày ${transaction.date.day}-${transaction.date.month}-${transaction.date.year}',
                   style: TextStyle(
                     color: Colors.grey[600],
                     fontSize: 12,
@@ -704,7 +787,7 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
           
           // Số tiền
           Text(
-            '${transaction.amount.toStringAsFixed(0)} VND',
+            _formatFullCurrency(transaction.amount, transaction.currency ?? _selectedCurrency),
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 16,
@@ -731,6 +814,12 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
     return amount.toStringAsFixed(0);
   }
 
+  String _formatFullCurrency(double amount, String currency) {
+    // Hiển thị đầy đủ số tiền theo đơn vị đã chọn
+    final formatter = NumberFormat.currency(locale: 'vi_VN', symbol: currency == 'VND' ? '₫' : currency);
+    return formatter.format(amount);
+  }
+
   Future<void> _selectDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -745,19 +834,31 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
     }
   }
 
-  void _addTransaction() {
+  void _addTransaction() async {
     if (_selectedCategory == null) return;
-    
-    // TODO: Implement actual transaction creation
-    print('Adding transaction:');
-    print('Type: ${_selectedType == IncomeExpenseType.income ? 'Income' : 'Expense'}');
-    print('Description: ${_descriptionController.text}');
-    print('Amount: ${_amountController.text}');
-    print('Category: $_selectedCategory');
-    print('Currency: $_selectedCurrency');
-    print('Date: ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}');
-    
-    // Show success message
+
+    final parsedAmount = double.tryParse(
+          _amountController.text.replaceAll(RegExp(r'[^0-9]'), '').trim(),
+        ) ??
+        0;
+
+    final tx = IncomeExpense(
+      id: const Uuid().v4(),
+      amount: parsedAmount,
+      currency: _selectedCurrency,
+      date: _selectedDate,
+      description: _descriptionController.text.trim(),
+      type: _selectedType,
+      categoryId: _selectedCategory,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      isSynced: false,
+      userId: 'offline_user',
+    );
+
+    await ref.read(incomeExpensesProvider.notifier).addIncomeExpense(tx);
+
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -766,11 +867,77 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
         backgroundColor: _selectedType == IncomeExpenseType.income ? Colors.green : Colors.red,
       ),
     );
-    
-    // Reset form
+
     _descriptionController.clear();
     _amountController.text = '0';
-    _selectedCategory = null;
+    setState(() {
+      _selectedCategory = null;
+    });
+  }
+
+  void _showAddCategoryDialog() {
+    final nameController = TextEditingController();
+    final iconController = TextEditingController(text: '🍽️');
+    final colorController = TextEditingController(text: '#FF6B6B');
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Thêm danh mục mới'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: 'Tên danh mục',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: iconController,
+              decoration: const InputDecoration(
+                labelText: 'Biểu tượng (emoji)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: colorController,
+              decoration: const InputDecoration(
+                labelText: 'Màu (#RRGGBB)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Hủy')),
+          ElevatedButton(
+            onPressed: () async {
+              final text = nameController.text.trim();
+              if (text.isEmpty) return;
+              final id = const Uuid().v4();
+              final newCategory = Category(
+                id: id,
+                name: text.toLowerCase(),
+                text: text,
+                icon: iconController.text.isEmpty ? '📁' : iconController.text,
+                color: colorController.text.isEmpty ? '#CCCCCC' : colorController.text,
+                order: 99,
+                type: _selectedType,
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+                userId: 'offline_user',
+              );
+              await ref.read(categoriesProvider.notifier).addCategory(newCategory);
+              if (mounted) Navigator.pop(context);
+            },
+            child: const Text('Lưu'),
+          ),
+        ],
+      ),
+    );
   }
 
   List<IncomeExpense> _getFilteredTransactions(List<IncomeExpense> allTransactions) {
